@@ -14,7 +14,7 @@
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate   # win 运行  .venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 ```
