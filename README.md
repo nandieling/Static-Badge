@@ -2,7 +2,7 @@
 
 使用图形界面裁剪圆形勋章：选择一张图片，拖动/缩放正方形裁剪框（内切圆会同步显示），一键导出圆形透明背景的 WebP。
 能直接裁剪圆形的软件比较少，PS又比较大，所以写了这个软件。
-![静态勋章制作](1.webp)
+![静态勋章制作](Snipaste_2026-01-09_10-49-21.png)
 
 ## 功能
 
@@ -43,7 +43,7 @@ chmod +x build_swift.sh
 
 打包脚本会做通用构建、组装 `.app`、写入 `Info.plist` 并做 ad-hoc 签名。未签名应用在其他电脑上首次打开可能会被 Gatekeeper 拦截，需要右键“打开”或在系统设置中允许。
 
-应用图标由 `tools/make-icon.swift` 画出来（10 个尺寸的 .iconset 交给 `iconutil`），删掉 `Sources/StaticBadge/Resources/AppIcon.icns` 后重新打包会自动重画。
+应用图标取自根目录的 `1.webp`：打包时用 `tools/make-icns.swift` 缩放出 10 个尺寸，再交给 `iconutil` 合成 `Sources/StaticBadge/Resources/AppIcon.icns`。图标源图按 `1.icns`、`1.webp`、`1.png` 的顺序查找，三者都没有时用 `tools/make-icon.swift` 画一张兜底图标。换图标只要替换根目录的源图，然后重新执行 `./build_swift.sh`。
 
 ### 目录
 
@@ -53,9 +53,10 @@ Sources/CWebP/                    内嵌的 libwebp 源码 + 一层精简 C 封�
 Sources/StaticBadgeCore/          裁剪几何、图片解码、圆形遮罩导出、文件名递增
 Sources/StaticBadge/              AppKit 界面（窗口、菜单、画布）
 Tests/StaticBadgeCoreTests/       核心逻辑测试
+tools/make-icns.swift             由源图生成 10 个尺寸的应用图标
 tools/make-icon.swift             画一张兜底应用图标
 build_swift.sh                    通用包打包脚本
-1.webp                            应用图标源图
+1.webp                            应用图标源图（不参与界面显示）
 ```
 
 ### 不入库的文件
