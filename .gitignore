@@ -1,0 +1,17 @@
+# Swift
+.build/
+dist_swift/
+DerivedData/
+*.xcodeproj/
+Package.resolved
+
+# Python（原实现）
+.venv/
+__pycache__/
+*.pyc
+.pyinstaller/
+build_x64/
+dist_x64/
+
+# 系统
+.DS_Store
