@@ -4,6 +4,7 @@
 #   ./build_swift.sh            通用包（默认）
 #   ./build_swift.sh --host     只编当前架构，调试时更快
 #
+# 应用图标按这个顺序取：1.icns > 1.webp > 1.png > 自绘图标（tools/make-icon.swift）。
 # 产物：dist_swift/静态勋章制作.app 与 dist_swift/静态勋章制作-mac-universal.zip
 set -euo pipefail
 
@@ -30,14 +31,29 @@ if [[ "${1:-}" == "--host" ]]; then
   shift
 fi
 
-# 图标丢了也能重新画出来（内容只依赖系统框架）。
-if [[ ! -f "${ICON_FILE}" ]]; then
-  echo "==> ${ICON_FILE} 不存在，重新生成图标"
-  mkdir -p "${DIST_DIR}" "${ICONSET_DIR}"
+# 应用图标
+ICON_SOURCE=""
+for candidate in 1.icns 1.webp 1.png; do
+  if [[ -f "${candidate}" ]]; then
+    ICON_SOURCE="${candidate}"
+    break
+  fi
+done
+
+mkdir -p "${DIST_DIR}"
+if [[ -n "${ICON_SOURCE}" && "${ICON_SOURCE}" == *.icns ]]; then
+  echo "==> 直接采用 ${ICON_SOURCE} 作为应用图标"
+  cp "${ICON_SOURCE}" "${ICON_FILE}"
+elif [[ -n "${ICON_SOURCE}" ]]; then
+  echo "==> 由 ${ICON_SOURCE} 生成应用图标"
+  swift tools/make-icns.swift "${ICON_SOURCE}" "${ICONSET_DIR}"
+  iconutil -c icns "${ICONSET_DIR}" -o "${ICON_FILE}"
+elif [[ ! -f "${ICON_FILE}" ]]; then
+  echo "==> 未找到图标源文件，绘制默认图标"
   swift tools/make-icon.swift "${ICONSET_DIR}"
   iconutil -c icns "${ICONSET_DIR}" -o "${ICON_FILE}"
-  rm -rf "${ICONSET_DIR}"
 fi
+rm -rf "${ICONSET_DIR}"
 
 echo "==> swift build -c release ${ARCH_ARGS[*]}"
 swift build -c release "${ARCH_ARGS[@]}"
@@ -87,6 +103,8 @@ cat >"${APP}/Contents/Info.plist" <<PLIST
 	<string>${EXECUTABLE}</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>${BUNDLE_ID}</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -112,6 +130,11 @@ cat >"${APP}/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+
+# 找不到图标时别悄悄降级成通用图标
+if [[ ! -f "${APP}/Contents/Resources/AppIcon.icns" ]]; then
+  echo "警告：缺少 ${APP}/Contents/Resources/AppIcon.icns" >&2
+fi
 
 echo "==> ad-hoc 签名"
 codesign --force --sign - --timestamp=none "${APP}" >/dev/null

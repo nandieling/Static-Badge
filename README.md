@@ -2,7 +2,7 @@
 
 使用图形界面裁剪圆形勋章：选择一张图片，拖动/缩放正方形裁剪框（内切圆会同步显示），一键导出圆形透明背景的 WebP。
 能直接裁剪圆形的软件比较少，PS又比较大，所以写了这个软件。
-![静态勋章制作](Snipaste_2026-01-09_10-49-21.png)
+![静态勋章制作](1.webp)
 
 ## 功能
 
@@ -53,9 +53,18 @@ Sources/CWebP/                    内嵌的 libwebp 源码 + 一层精简 C 封�
 Sources/StaticBadgeCore/          裁剪几何、图片解码、圆形遮罩导出、文件名递增
 Sources/StaticBadge/              AppKit 界面（窗口、菜单、画布）
 Tests/StaticBadgeCoreTests/       核心逻辑测试
-tools/make-icon.swift             生成应用图标
+tools/make-icon.swift             画一张兜底应用图标
 build_swift.sh                    通用包打包脚本
+1.webp                            应用图标源图
 ```
+
+### 不入库的文件
+
+`.gitignore` 已经排除掉构建产物和本地环境，提交时不用管：
+
+- Swift：`.build/`、`dist_swift/`、`DerivedData/`、`Package.resolved`
+- Python：`.venv/`、`dist_x64/`、`build_x64/`、`.pyinstaller/`、`__pycache__/`、`*.pyc`
+- 系统与其它：`.DS_Store`；本地图标 `1.icns`（想固定图标就换成提交 `1.webp` 这条路）
 
 ## Python 版（原实现）
 
