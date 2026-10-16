@@ -8,17 +8,16 @@ import UniformTypeIdentifiers
 /// 导出走 `AnimatedBadgeExporter` 顺序解码，两条路共用同一个裁剪框。
 final class VideoBadgeViewController: BadgePageViewController {
     private let canvas = CropCanvasView()
-    private let pathLabel = NSTextField(labelWithString: "未选择视频")
-    private let sourceButton = NSButton()
-    private let saveDirButton = NSButton()
+    private let pathLabel = FormLayout.pathLabel("还没有选择视频")
+    private let output = OutputOptionsControl()
+    private let sourceButton = FormLayout.button(title: "选择视频", symbol: "film",
+                                                 action: #selector(chooseVideo(_:)),
+                                                 keyEquivalent: "e")
     private let fpsPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let startField = NSTextField()
     private let durationField = NSTextField()
-    private let optionsLabel = NSTextField(labelWithString: "未选择视频")
-    private let output = OutputOptionsControl()
     private let slider = NSSlider()
     private let timeLabel = NSTextField(labelWithString: "00:00.00 / 00:00.00")
-    private let progress = NSProgressIndicator()
 
     private let frameRates: [Double] = [60, 30, 24, 15]
     private let defaultFrameRate: Double = 30
@@ -40,29 +39,12 @@ final class VideoBadgeViewController: BadgePageViewController {
         exporting || source != nil
     }
 
-    // MARK: - 布局
+    // MARK - 布局
 
     override func loadView() {
         let root = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 760))
 
-        sourceButton.title = "选择视频"
-        sourceButton.bezelStyle = .rounded
-        sourceButton.target = self
-        sourceButton.action = #selector(chooseVideo(_:))
-        sourceButton.keyEquivalent = "e"
-        sourceButton.keyEquivalentModifierMask = .command
-
-        pathLabel.lineBreakMode = .byTruncatingMiddle
-        pathLabel.isSelectable = true
-        pathLabel.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
-        pathLabel.setContentHuggingPriority(.init(1), for: .horizontal)
-        pathLabel.setContentCompressionResistancePriority(.init(1), for: .horizontal)
-
-        saveDirButton.title = "保存目录"
-        saveDirButton.bezelStyle = .rounded
-        saveDirButton.target = self
-        saveDirButton.action = #selector(chooseSaveDir(_:))
-        configureSaveDirField(placeholder: "保存目录（默认与原视频相同）")
+        configureSaveDir(placeholder: "保存目录（默认与原视频相同）")
         configureRunButton(#selector(runExport(_:)))
 
         for rate in frameRates {
@@ -79,14 +61,12 @@ final class VideoBadgeViewController: BadgePageViewController {
             field.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
             field.target = self
             field.action = #selector(optionsChanged(_:))
+            field.setContentCompressionResistancePriority(.init(200), for: .horizontal)
         }
-        startField.placeholderString = "起始(秒)"
-        durationField.placeholderString = "时长(秒)"
+        startField.placeholderString = "0"
+        durationField.placeholderString = "整段"
 
-        optionsLabel.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
-        optionsLabel.textColor = .secondaryLabelColor
-        optionsLabel.lineBreakMode = .byTruncatingTail
-        optionsLabel.setContentHuggingPriority(.init(1), for: .horizontal)
+        output.onChange = { [weak self] in self?.refreshSummaries() }
 
         slider.minValue = 0
         slider.maxValue = 1
@@ -97,92 +77,72 @@ final class VideoBadgeViewController: BadgePageViewController {
         slider.isEnabled = false
 
         timeLabel.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize(for: .small),
-                                                   weight: .regular)
+                                                    weight: .regular)
         timeLabel.alignment = .right
         timeLabel.setContentHuggingPriority(.init(1000), for: .horizontal)
 
-        progress.style = .bar
-        progress.isIndeterminate = false
-        progress.minValue = 0
-        progress.maxValue = 100
-        progress.doubleValue = 0
-        progress.controlSize = .small
-        progress.isHidden = true
-
         canvas.placeholderText = "未选择视频"
-        output.onChange = { [weak self] in self?.refreshOptionsLabel() }
+        canvas.onCropChange = { [weak self] in self?.refreshSummaries() }
+        canvasView = canvas
+        refreshSummaries()
 
-        let topRow = NSStackView(views: [sourceButton, pathLabel])
-        topRow.orientation = .horizontal
-        topRow.spacing = 8
+        let timelineRow = FormLayout.row([slider, timeLabel])
+        NSLayoutConstraint.activate([
+            startField.widthAnchor.constraint(equalToConstant: 48),
+            durationField.widthAnchor.constraint(equalToConstant: 48),
+            slider.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            timeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 124),
+        ])
 
-        let saveRow = NSStackView(views: [saveDirButton, saveDirField])
-        saveRow.orientation = .horizontal
-        saveRow.spacing = 8
+        let grid = FormLayout.grid(rows: [
+            ("源文件", FormLayout.row([sourceButton, pathLabel])),
+            ("保存目录", FormLayout.row([saveDirButton, saveDirField])),
+            ("输出尺寸", output),
+            ("动图", FormLayout.row([fpsPopup, FormLayout.note("起始"), startField,
+                                    FormLayout.note("秒"), FormLayout.note("时长"), durationField,
+                                    FormLayout.note("秒")])),
+            ("", FormLayout.row([statusLabel, FormLayout.spacer(), runButton])),
+        ])
 
-        let optionsRow = NSStackView(views: [fpsPopup, startField, durationField])
-        optionsRow.orientation = .horizontal
-        optionsRow.spacing = 8
+        let stage = FormLayout.panel(canvas)
+        let rule = FormLayout.separator()
 
-        let outputRow = NSStackView(views: [output, optionsLabel])
-        outputRow.orientation = .horizontal
-        outputRow.spacing = 8
-
-        let timelineRow = NSStackView(views: [slider, timeLabel])
-        timelineRow.orientation = .horizontal
-        timelineRow.spacing = 8
-
-        for control in [topRow, saveRow, optionsRow, outputRow, runButton, canvas,
-                        timelineRow, progress] as [NSView] {
+        for control in [grid, rule, stage, timelineRow] as [NSView] {
             control.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(control)
         }
-
         NSLayoutConstraint.activate([
-            topRow.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
-            topRow.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            topRow.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+            grid.topAnchor.constraint(equalTo: root.topAnchor, constant: FormLayout.margin),
+            grid.leadingAnchor.constraint(equalTo: root.leadingAnchor,
+                                          constant: FormLayout.margin),
+            grid.trailingAnchor.constraint(equalTo: root.trailingAnchor,
+                                           constant: -FormLayout.margin),
 
-            saveRow.topAnchor.constraint(equalTo: topRow.bottomAnchor, constant: 8),
-            saveRow.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            saveRow.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+            rule.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 14),
+            rule.leadingAnchor.constraint(equalTo: grid.leadingAnchor),
+            rule.trailingAnchor.constraint(equalTo: grid.trailingAnchor),
 
-            optionsRow.topAnchor.constraint(equalTo: saveRow.bottomAnchor, constant: 8),
-            optionsRow.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            optionsRow.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
-            startField.widthAnchor.constraint(equalToConstant: 72),
-            durationField.widthAnchor.constraint(equalToConstant: 72),
+            stage.topAnchor.constraint(equalTo: rule.bottomAnchor, constant: 12),
+            stage.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: FormLayout.margin),
+            stage.trailingAnchor.constraint(equalTo: root.trailingAnchor,
+                                            constant: -FormLayout.margin),
 
-            outputRow.topAnchor.constraint(equalTo: optionsRow.bottomAnchor, constant: 8),
-            outputRow.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            outputRow.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+            timelineRow.topAnchor.constraint(equalTo: stage.bottomAnchor, constant: 10),
+            timelineRow.leadingAnchor.constraint(equalTo: root.leadingAnchor,
+                                                 constant: FormLayout.margin),
+            timelineRow.trailingAnchor.constraint(equalTo: root.trailingAnchor,
+                                                  constant: -FormLayout.margin),
+            timelineRow.bottomAnchor.constraint(equalTo: root.bottomAnchor,
+                                                constant: -FormLayout.margin),
 
-            runButton.topAnchor.constraint(equalTo: outputRow.bottomAnchor, constant: 8),
-            runButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            runButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
-
-            canvas.topAnchor.constraint(equalTo: runButton.bottomAnchor, constant: 12),
-            canvas.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            canvas.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
-
-            timelineRow.topAnchor.constraint(equalTo: canvas.bottomAnchor, constant: 8),
-            timelineRow.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            timelineRow.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
-            slider.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
-
-            progress.topAnchor.constraint(equalTo: timelineRow.bottomAnchor, constant: 6),
-            progress.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            progress.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
-            progress.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
-
-            canvas.heightAnchor.constraint(greaterThanOrEqualToConstant: Self.canvasMinHeight),
+            stage.heightAnchor.constraint(greaterThanOrEqualToConstant: Self.canvasMinHeight),
         ])
 
         view = root
         enableIdleControls()
     }
 
-    // MARK: - 状态
+    // MARK - 状态
 
     private var selectedFrameRate: Double {
         Double(fpsPopup.selectedItem?.tag ?? Int(defaultFrameRate))
@@ -190,10 +150,11 @@ final class VideoBadgeViewController: BadgePageViewController {
 
     private func enableIdleControls() {
         let loaded = source != nil && !exporting
-        for control in [sourceButton, saveDirButton, fpsPopup, startField, durationField, slider] as [NSControl] {
-            control.isEnabled = source == nil ? (control === sourceButton) : loaded
+        for control in [saveDirButton, fpsPopup, startField, durationField, slider] as [NSControl] {
+            control.isEnabled = source == nil ? false : loaded
         }
         output.setEnabled(loaded)
+        sourceButton.isEnabled = !exporting
         runButton.isEnabled = source != nil
     }
 
@@ -206,14 +167,22 @@ final class VideoBadgeViewController: BadgePageViewController {
             + UI.clock(source.duration, fractionDigits: 2)
     }
 
-    private func refreshOptionsLabel() {
+    private func refreshSummaries() {
         guard let source, let range = rangeOrDefault() else {
-            optionsLabel.stringValue = "未选择视频"
+            statusLabel.stringValue = "选一段视频，绿色框可以拖动和缩放"
+            canvas.captionText = nil
             return
         }
         let frames = AnimatedBadgeExporter.estimatedFrameCount(duration: range.duration,
                                                               fps: selectedFrameRate)
-        optionsLabel.stringValue = "导出约 \(frames) 帧 · \(output.sizeSummary) · \(output.limitSummary) "
+        let side = output.outputSide ?? canvas.currentCrop?.side
+        if let cropSide = canvas.currentCrop?.side, let side {
+            canvas.captionText = cropSide == side
+                ? "\(side) × \(side) 圆形 · \(Int(selectedFrameRate)) 帧/秒"
+                : "\(cropSide) × \(cropSide) → \(side) × \(side) 圆形 · \(Int(selectedFrameRate)) 帧/秒"
+        }
+        let sizeText = side.map { "\($0) × \($0)" } ?? output.sizeSummary
+        statusLabel.stringValue = "约 \(frames) 帧 · \(sizeText) · \(output.limitSummary) "
             + "· 循环播放 · 整段 \(UI.clock(source.duration, fractionDigits: 1)) 秒"
     }
 
@@ -229,7 +198,7 @@ final class VideoBadgeViewController: BadgePageViewController {
     private func validatedRange() -> (start: TimeInterval, duration: TimeInterval)? {
         guard let source else { return nil }
         if startField.stringValue.trimmedNilIfEmpty != nil, UI.parseSeconds(startField.stringValue) == nil {
-            UI.present(style: .critical, title: "错误", message: "起始时间要填秒数，例如 1.5。")
+            UI.present(style: .critical, title: "错误", message: "起始时间要填秒数，例如 1.5；留空表示从头开始。")
             return nil
         }
         if durationField.stringValue.trimmedNilIfEmpty != nil,
@@ -252,7 +221,7 @@ final class VideoBadgeViewController: BadgePageViewController {
         return (start, length)
     }
 
-    // MARK: - 动作
+    // MARK - 动作
 
     @objc func chooseVideo(_ sender: Any?) {
         guard !exporting else { return }
@@ -286,7 +255,7 @@ final class VideoBadgeViewController: BadgePageViewController {
             slider.doubleValue = 0
             enableIdleControls()
             refreshTimeLabel()
-            refreshOptionsLabel()
+            refreshSummaries()
         } catch {
             UI.present(style: .critical, title: "错误",
                        message: (error as? BadgeError)?.errorDescription
@@ -295,14 +264,14 @@ final class VideoBadgeViewController: BadgePageViewController {
     }
 
     @objc private func optionsChanged(_ sender: Any?) {
-        refreshOptionsLabel()
+        refreshSummaries()
     }
 
     @objc private func scrubbed(_ sender: Any?) {
         guard let source else { return }
         previewTime = source.clamped(slider.doubleValue)
         refreshTimeLabel()
-        refreshOptionsLabel()
+        refreshSummaries()
         guard !exporting else { return }
         requestPreview(at: previewTime)
     }
@@ -326,10 +295,6 @@ final class VideoBadgeViewController: BadgePageViewController {
             cancelled.set(true)
             runButton.isEnabled = false
             runButton.title = "正在取消…"
-            return
-        }
-        guard source != nil else {
-            UI.present(style: .warning, title: "提示", message: "请先选择视频。")
             return
         }
         guard let source, let crop = canvas.currentCrop else {
@@ -376,7 +341,8 @@ final class VideoBadgeViewController: BadgePageViewController {
         guard ratio >= 1 || ratio - lastReportedProgress >= 0.02 else { return }
         lastReportedProgress = ratio
         DispatchQueue.main.async {
-            self.progress.doubleValue = ratio * 100
+            self.canvas.progress = ratio
+            self.statusLabel.stringValue = String(format: "正在导出… %3d%%", Int(ratio * 100))
         }
     }
 
@@ -384,19 +350,15 @@ final class VideoBadgeViewController: BadgePageViewController {
         exporting = true
         cancelled.set(false)
         lastReportedProgress = 0
-        for control in [sourceButton, saveDirButton, fpsPopup, startField, durationField, slider] as [NSControl] {
-            control.isEnabled = false
-        }
-        output.setEnabled(false)
-        progress.isHidden = false
-        progress.doubleValue = 0
+        enableIdleControls()
+        canvas.progress = 0.004
         runButton.title = "取消"
         runButton.isEnabled = true
     }
 
     private func endExport() {
         exporting = false
-        progress.isHidden = true
+        canvas.progress = 0
         runButton.title = "运行"
         enableIdleControls()
     }
@@ -407,14 +369,17 @@ final class VideoBadgeViewController: BadgePageViewController {
         switch outcome {
         case .success(let result):
             guard let target = write(result.data, to: directory, baseName: baseName) else { return }
+            statusLabel.stringValue = "已导出 \(UI.byteText(result.data.count)) · "
+                + "\(target.lastPathComponent)"
             UI.present(style: .informational, title: "完成",
                        message: "已生成 \(result.frameCount) 帧、\(result.side) × \(result.side) 的"
                            + "动态勋章（无限循环）：\n\(target.path)\n"
                            + "文件 \(UI.byteText(result.data.count)) · 画质 \(result.quality)"
                            + (result.attempts > 1 ? " · 试了 \(result.attempts) 次" : ""))
         case .failure(BadgeError.cancelled):
-            optionsLabel.stringValue = "已取消导出。"
+            statusLabel.stringValue = "已取消导出。"
         case .failure(let error):
+            statusLabel.stringValue = "导出失败"
             UI.present(style: .critical, title: "错误",
                        message: (error as? BadgeError)?.errorDescription
                            ?? error.localizedDescription)

@@ -10,6 +10,9 @@ final class OutputOptionsControl: NSStackView {
     /// 下拉里可选的固定边长；“原始分辨率”用 tag 0 表示。
     private static let fixedSizes = [1080, 800, 600]
 
+    /// 默认就把体积压在 5 MB 以内：绝大多数勋章远远用不完，又能挡住少数失控的大文件。
+    private static let defaultMegabytes = "5"
+
     /// 选项变化时回调，用来刷新提示文字。
     var onChange: (() -> Void)?
 
@@ -18,7 +21,6 @@ final class OutputOptionsControl: NSStackView {
         orientation = .horizontal
         spacing = 8
 
-        let title = NSTextField(labelWithString: "输出尺寸")
         sizePopup.addItem(withTitle: "原始分辨率")
         sizePopup.lastItem?.tag = 0
         for side in Self.fixedSizes {
@@ -31,22 +33,24 @@ final class OutputOptionsControl: NSStackView {
 
         limitCheck.target = self
         limitCheck.action = #selector(limitToggled(_:))
+        limitCheck.state = .on
 
         limitField.placeholderString = "如 5"
+        limitField.stringValue = Self.defaultMegabytes
         limitField.usesSingleLineMode = true
         limitField.alignment = .right
         limitField.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
         limitField.target = self
         limitField.action = #selector(changed(_:))
-        limitField.isEnabled = false
+        limitField.isEnabled = true
 
         unitLabel.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
         unitLabel.textColor = .secondaryLabelColor
 
-        for view in [title, sizePopup, limitCheck, limitField, unitLabel] as [NSView] {
+        for view in [sizePopup, limitCheck, limitField, unitLabel] as [NSView] {
             addArrangedSubview(view)
         }
-        limitField.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        limitField.widthAnchor.constraint(equalToConstant: 56).isActive = true
     }
 
     @available(*, unavailable)

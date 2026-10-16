@@ -1,10 +1,12 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// 窗口根视图：顶上一个模式切换，下面装当前页面的内容。
+/// 窗口根视图：模式切换放在标题栏工具条上，下面装当前页面的内容。
 ///
 /// 菜单里的“添加图片 / 选择视频 / 运行”都先到这里，再转给当前显示的页面。
-final class BadgeModeViewController: NSViewController, NSUserInterfaceValidations {
+final class BadgeModeViewController: NSViewController, NSUserInterfaceValidations, NSToolbarDelegate {
+    private static let modeItemIdentifier = NSToolbarItem.Identifier("勋章制作.模式")
+
     private enum Mode: Int, CaseIterable {
         case image
         case video
@@ -26,17 +28,28 @@ final class BadgeModeViewController: NSViewController, NSUserInterfaceValidation
         didSet { applyMode() }
     }
 
-    override func loadView() {
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 760))
-
+    /// 挂在窗口工具条中间的模式切换；窗口那边直接取用。
+    lazy var toolbarItem: NSToolbarItem = {
         picker.segmentCount = Mode.allCases.count
         for (index, option) in Mode.allCases.enumerated() {
             picker.setLabel(option.title, forSegment: index)
         }
         picker.trackingMode = .selectOne
+        picker.segmentStyle = .texturedRounded
         picker.selectedSegment = 0
         picker.target = self
         picker.action = #selector(modeChanged(_:))
+
+        let item = NSToolbarItem(itemIdentifier: Self.modeItemIdentifier)
+        item.label = "模式"
+        item.paletteLabel = "勋章模式"
+        item.view = picker
+        item.visibilityPriority = .high
+        return item
+    }()
+
+    override func loadView() {
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 720))
 
         addChild(imagePage)
         addChild(videoPage)
@@ -51,15 +64,10 @@ final class BadgeModeViewController: NSViewController, NSUserInterfaceValidation
             ])
         }
 
-        for control in [picker, stage] as [NSView] {
-            control.translatesAutoresizingMaskIntoConstraints = false
-            root.addSubview(control)
-        }
+        stage.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(stage)
         NSLayoutConstraint.activate([
-            picker.topAnchor.constraint(equalTo: root.topAnchor, constant: 8),
-            picker.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-
-            stage.topAnchor.constraint(equalTo: picker.bottomAnchor, constant: 8),
+            stage.topAnchor.constraint(equalTo: root.topAnchor),
             stage.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             stage.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             stage.bottomAnchor.constraint(equalTo: root.bottomAnchor),
@@ -67,6 +75,26 @@ final class BadgeModeViewController: NSViewController, NSUserInterfaceValidation
 
         view = root
         applyMode()
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        focusCanvas()
+    }
+
+    // MARK - 工具条
+
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+                 willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        itemIdentifier == Self.modeItemIdentifier ? toolbarItem : nil
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.flexibleSpace, Self.modeItemIdentifier, .flexibleSpace]
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        toolbarDefaultItemIdentifiers(toolbar)
     }
 
     private var currentPage: BadgePageViewController {
@@ -77,6 +105,14 @@ final class BadgeModeViewController: NSViewController, NSUserInterfaceValidation
         imagePage.view.isHidden = mode != .image
         videoPage.view.isHidden = mode != .video
         picker.selectedSegment = mode == .image ? 0 : 1
+        focusCanvas()
+    }
+
+    /// 焦点交给取景区，省得一打开窗口就是保存目录输入框顶着一圈蓝框、整串路径反白。
+    private func focusCanvas() {
+        guard let window = view.window, let canvas = currentPage.canvasView else { return }
+        window.initialFirstResponder = canvas
+        window.makeFirstResponder(canvas)
     }
 
     @objc private func modeChanged(_ sender: Any?) {

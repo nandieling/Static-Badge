@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.controller = controller
         self.window = window
         NSApp.mainMenu = AppMenu.make(controller: controller, delegate: self)
+        window.toolbar = makeToolbar(controller: controller)
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -41,6 +42,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// 模式切换放在标题栏正中，内容区就能整块留给表单和画布。
+    private func makeToolbar(controller: BadgeModeViewController) -> NSToolbar {
+        let toolbar = NSToolbar(identifier: "勋章制作.主工具条")
+        toolbar.delegate = controller
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        if #available(macOS 11.0, *) {
+            toolbar.centeredItemIdentifier = controller.toolbarItem.itemIdentifier
+        }
+        return toolbar
     }
 
     /// AppKit 可能在 `applicationDidFinishLaunching` 之前就派发“打开”事件，

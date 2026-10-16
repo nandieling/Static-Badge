@@ -12,8 +12,28 @@ final class CropCanvasView: NSView {
     private static let lineWidth: CGFloat = 2
     private static let handleLineWidth: CGFloat = 1
 
+    /// 画布底色：比窗口背景再沉一点，圆角容器里看起来像一块“取景区”。
+    private static let background = NSColor(name: nil) { appearance in
+        let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return dark
+            ? NSColor(srgbRed: 0.114, green: 0.114, blue: 0.122, alpha: 1)
+            : NSColor(srgbRed: 0.937, green: 0.937, blue: 0.945, alpha: 1)
+    }
+    /// 内切圆以外压暗用的那层。
+    private static let scrim = NSColor(white: 0, alpha: 0.22)
+    private static let accent = circleColor
+
     /// 没有画面时中间显示的提示语。
     var placeholderText = "未选择图片" { didSet { needsDisplay = true } }
+
+    /// 裁剪框左上角那行小字，例如 `480 × 480 → 800 × 800`。
+    var captionText: String? { didSet { needsDisplay = true } }
+
+    /// 导出进度，0 表示不画进度条。
+    var progress: Double = 0 { didSet { needsDisplay = true } }
+
+    /// 裁剪框被挪动或换图后回调，页面用它刷新尺寸提示。
+    var onCropChange: (() -> Void)?
 
     private(set) var source: SourceImage?
     private var displayImage: NSImage?
@@ -45,6 +65,7 @@ final class CropCanvasView: NSView {
         drag = nil
         window?.invalidateCursorRects(for: self)
         needsDisplay = true
+        onCropChange?()
     }
 
     /// 只换预览帧、保留用户摆好的裁剪框，给视频时间轴用。
@@ -118,11 +139,17 @@ final class CropCanvasView: NSView {
     // MARK: - 绘制
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.white.setFill()
+        Self.background.setFill()
         bounds.fill()
+        let frame = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+                                 xRadius: 10, yRadius: 10)
+        frame.lineWidth = 1
+        NSColor.separatorColor.setStroke()
+        frame.stroke()
 
         guard let geometry = geometry(), let displayImage else {
             drawPlaceholder()
+            drawProgressBar()
             return
         }
 
@@ -130,6 +157,13 @@ final class CropCanvasView: NSView {
         displayImage.draw(in: geometry.imageRect, from: .zero, operation: .sourceOver, fraction: 1)
 
         let crop = geometry.cropRect
+        // 圆外压暗：整块裁剪区盖一层再挖掉内切圆，一眼能看出最终留下的是哪块。
+        let overlay = NSBezierPath(rect: crop)
+        overlay.appendOval(in: crop)
+        overlay.windingRule = .evenOdd
+        Self.scrim.setFill()
+        overlay.fill()
+
         let square = NSBezierPath(rect: crop)
         square.lineWidth = Self.lineWidth
         Self.squareColor.setStroke()
@@ -142,13 +176,16 @@ final class CropCanvasView: NSView {
 
         let handles = NSBezierPath()
         for rect in geometry.handles.values {
-            handles.appendRect(rect.insetBy(dx: 0.5, dy: 0.5))
+            handles.appendRoundedRect(rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 2, yRadius: 2)
         }
         handles.lineWidth = Self.handleLineWidth
         Self.handleFill.setFill()
         handles.fill()
         Self.handleStroke.setStroke()
         handles.stroke()
+
+        drawCaption(over: crop)
+        drawProgressBar()
     }
 
     private func drawPlaceholder() {
@@ -161,6 +198,38 @@ final class CropCanvasView: NSView {
         (text as NSString).draw(
             at: NSPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2),
             withAttributes: attributes)
+    }
+
+    /// 裁剪框左上角的尺寸说明，贴在框内侧，留出角上手柄的位置。
+    private func drawCaption(over crop: CGRect) {
+        guard let text = captionText, !text.isEmpty else { return }
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: NSColor.white,
+        ]
+        let size = (text as NSString).size(withAttributes: attributes)
+        let chip = NSRect(x: crop.minX + 12,
+                          y: crop.maxY - 12 - size.height - 6,
+                          width: size.width + 14,
+                          height: size.height + 6)
+        NSColor(white: 0, alpha: 0.62).setFill()
+        NSBezierPath(roundedRect: chip, xRadius: 5, yRadius: 5).fill()
+        (text as NSString).draw(at: NSPoint(x: chip.minX + 7, y: chip.minY + 3),
+                                withAttributes: attributes)
+    }
+
+    /// 贴在画布顶边的一条细进度条，不额外占布局位置。
+    private func drawProgressBar() {
+        guard progress > 0 else { return }
+        let track = NSRect(x: bounds.minX + 10, y: bounds.maxY - 16,
+                           width: bounds.width - 20, height: 4)
+        NSColor(white: 1, alpha: 0.3).setFill()
+        NSBezierPath(roundedRect: track, xRadius: 2, yRadius: 2).fill()
+        let ratio = CGFloat(min(max(progress, 0), 1))
+        let filled = NSRect(x: track.minX, y: track.minY,
+                            width: max(4, track.width * ratio), height: track.height)
+        Self.accent.setFill()
+        NSBezierPath(roundedRect: filled, xRadius: 2, yRadius: 2).fill()
     }
 
     // MARK: - 交互
@@ -200,6 +269,7 @@ final class CropCanvasView: NSView {
 
         needsDisplay = true
         window?.invalidateCursorRects(for: self)
+        onCropChange?()
     }
 
     override func mouseUp(with event: NSEvent) {

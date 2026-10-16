@@ -12,32 +12,55 @@ import StaticBadgeCore
 /// 静态/动态两个页面共用的部分：保存目录、运行按钮、弹窗、导出落盘。
 class BadgePageViewController: NSViewController, BadgePage {
     let saveDirField = NSTextField()
+    let saveDirButton = NSButton(title: "选择…", target: nil, action: nil)
     let runButton = NSButton()
+    /// 运行按钮左边那句灰字，用来说当前设置和导出结果。
+    let statusLabel = NSTextField(labelWithString: "")
 
     var canRun: Bool { false }
+
+    /// 页面里的取景区。窗口开局把焦点给它：它能接焦点，又不会画出焦点框。
+    weak var canvasView: NSView?
 
     func runExport(_ sender: Any?) {}
 
     func load(url: URL) {}
 
-    // MARK: - 公共控件
+    // MARK - 公共控件
 
-    func configureSaveDirField(placeholder: String) {
+    func configureSaveDir(placeholder: String) {
         saveDirField.placeholderString = placeholder
         saveDirField.usesSingleLineMode = true
         saveDirField.cell?.wraps = false
         saveDirField.cell?.isScrollable = true
         saveDirField.lineBreakMode = .byTruncatingMiddle
+        saveDirField.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
+        saveDirField.setContentHuggingPriority(.init(1), for: .horizontal)
+        saveDirField.setContentCompressionResistancePriority(.init(40), for: .horizontal)
+
+        saveDirButton.bezelStyle = .rounded
+        saveDirButton.target = self
+        saveDirButton.action = #selector(chooseSaveDir(_:))
+        if let image = NSImage(systemSymbolName: "folder", accessibilityDescription: "选择保存目录") {
+            saveDirButton.image = image
+        }
     }
 
+    /// 运行按钮是窗口的默认按钮（回车即导出），⌘R 走菜单。
     func configureRunButton(_ action: Selector) {
         runButton.title = "运行"
         runButton.bezelStyle = .rounded
+        runButton.controlSize = .large
         runButton.target = self
         runButton.action = action
-        runButton.keyEquivalent = "r"
-        runButton.keyEquivalentModifierMask = .command
+        runButton.keyEquivalent = "\r"
         runButton.isEnabled = false
+
+        statusLabel.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
+        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.setContentHuggingPriority(.init(1), for: .horizontal)
+        statusLabel.setContentCompressionResistancePriority(.init(200), for: .horizontal)
     }
 
     @objc func chooseSaveDir(_ sender: Any?) {
