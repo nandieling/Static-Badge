@@ -3,12 +3,12 @@ import StaticBadgeCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
-    private var controller: MainViewController?
-    /// 启动时随“打开”事件一起送进来的图片，等界面建好后补上。
-    private var pendingImageURL: URL?
+    private var controller: BadgeModeViewController?
+    /// 启动时随“打开”事件一起送进来的文件，等界面建好后补上。
+    private var pendingURL: URL?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let controller = MainViewController()
+        let controller = BadgeModeViewController()
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
@@ -26,9 +26,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        if let pendingImageURL {
-            self.pendingImageURL = nil
-            controller.load(url: pendingImageURL)
+        // 命令行里直接给文件路径时也当成“打开”处理，开发和脚本调用都方便。
+        if pendingURL == nil {
+            pendingURL = CommandLine.arguments.dropFirst()
+                .first { $0.hasPrefix("/") && FileManager.default.fileExists(atPath: $0) }
+                .map { URL(fileURLWithPath: $0) }
+        }
+
+        if let pendingURL {
+            self.pendingURL = nil
+            controller.open(url: pendingURL)
         }
     }
 
@@ -41,10 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let url = urls.first else { return }
         guard let controller else {
-            pendingImageURL = url
+            pendingURL = url
             return
         }
-        controller.load(url: url)
+        controller.open(url: url)
     }
 
     @objc func showAboutPanel(_ sender: Any?) {

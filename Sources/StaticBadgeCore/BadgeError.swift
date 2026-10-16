@@ -8,6 +8,13 @@ public enum BadgeError: Error, Equatable, LocalizedError {
     case encodingFailed
     case writeFailed(path: String)
     case webpDecodeFailed(status: Int)
+    case unreadVideo(reason: String)
+    case videoHasNoVideoTrack
+    case videoRangeEmpty
+    case animationFailed(reason: String)
+    case cancelled
+    case invalidOutputSize
+    case sizeLimitExceeded(limit: Int, bestSize: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -23,6 +30,25 @@ public enum BadgeError: Error, Equatable, LocalizedError {
             return "写入失败：\(path)"
         case .webpDecodeFailed(let status):
             return "WebP 解码失败（状态码 \(status)）。"
+        case .unreadVideo(let reason):
+            return "无法读取视频：\(reason)"
+        case .videoHasNoVideoTrack:
+            return "这个视频里没有可用的画面轨道。"
+        case .videoRangeEmpty:
+            return "要导出的时间段是空的。"
+        case .animationFailed(let reason):
+            return "动态导出失败：\(reason)"
+        case .cancelled:
+            return "已取消导出。"
+        case .invalidOutputSize:
+            return "输出尺寸无效。"
+        case .sizeLimitExceeded(let limit, let bestSize):
+            return "即使压到最低画质仍有 \(byteText(bestSize))，超过 \(byteText(limit)) 的上限。"
+                + "换成更小的输出尺寸、更低的帧率或更短的时长再试。"
         }
     }
+}
+
+private func byteText(_ count: Int) -> String {
+    ByteCountFormatter.string(fromByteCount: Int64(count), countStyle: .file)
 }

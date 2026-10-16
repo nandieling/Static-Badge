@@ -12,6 +12,9 @@ final class CropCanvasView: NSView {
     private static let lineWidth: CGFloat = 2
     private static let handleLineWidth: CGFloat = 1
 
+    /// 没有画面时中间显示的提示语。
+    var placeholderText = "未选择图片" { didSet { needsDisplay = true } }
+
     private(set) var source: SourceImage?
     private var displayImage: NSImage?
     private(set) var cropBox = CropBox(origin: .zero, side: 0)
@@ -34,13 +37,32 @@ final class CropCanvasView: NSView {
         return cropBox.integralCrop(imageSize: source.pixelSize)
     }
 
+    /// 换一张图：裁剪框重画成最大内切正方形。
     func show(_ source: SourceImage?) {
         self.source = source
-        displayImage = source.map { NSImage(cgImage: $0.cgImage, size: NSSize(width: $0.pixelSize.width, height: $0.pixelSize.height)) }
+        displayImage = Self.bitmap(of: source)
         cropBox = source.map { CropBox.inscribed(in: $0.pixelSize) } ?? CropBox(origin: .zero, side: 0)
         drag = nil
         window?.invalidateCursorRects(for: self)
         needsDisplay = true
+    }
+
+    /// 只换预览帧、保留用户摆好的裁剪框，给视频时间轴用。
+    func updatePreview(_ source: SourceImage) {
+        guard let current = self.source, current.pixelSize == source.pixelSize else {
+            show(source)
+            return
+        }
+        self.source = source
+        displayImage = Self.bitmap(of: source)
+        needsDisplay = true
+    }
+
+    private static func bitmap(of source: SourceImage?) -> NSImage? {
+        source.map {
+            NSImage(cgImage: $0.cgImage, size: NSSize(width: $0.pixelSize.width,
+                                                      height: $0.pixelSize.height))
+        }
     }
 
     // MARK: - 坐标换算
@@ -130,7 +152,7 @@ final class CropCanvasView: NSView {
     }
 
     private func drawPlaceholder() {
-        let text = "未选择图片"
+        let text = placeholderText
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13),
             .foregroundColor: NSColor.tertiaryLabelColor,

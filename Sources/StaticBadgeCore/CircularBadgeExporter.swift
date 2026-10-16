@@ -5,10 +5,17 @@ public struct ExportOptions {
     /// 0~100，对应该 Qt 版的 `QImage.save(path, "WEBP", 90)`。
     public var quality: Double
     public var lossless: Bool
+    /// 导出正方形的边长；nil = 原始分辨率（即裁剪框边长）。
+    public var outputSide: Int?
+    /// 最终文件的字节上限；nil = 不限制。填了会自动往下找画质。
+    public var maxBytes: Int?
 
-    public init(quality: Double = 90, lossless: Bool = false) {
+    public init(quality: Double = 90, lossless: Bool = false,
+                outputSide: Int? = nil, maxBytes: Int? = nil) {
         self.quality = quality
         self.lossless = lossless
+        self.outputSide = outputSide
+        self.maxBytes = maxBytes
     }
 
     public static let standard = ExportOptions()
@@ -18,51 +25,34 @@ public struct ExportOptions {
 public enum CircularBadgeExporter {
     public static func webPData(from source: SourceImage, crop: IntegralCrop,
                                 options: ExportOptions = .standard) throws -> Data {
-        let image = source.cgImage
-        guard crop.side >= 1, crop.x >= 0, crop.y >= 0,
-              crop.x + crop.side <= image.width,
-              crop.y + crop.side <= image.height else {
-            throw BadgeError.invalidCrop
-        }
-        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(data: nil, width: crop.side, height: crop.side,
-                                      bitsPerComponent: 8, bytesPerRow: crop.side * 4,
-                                      space: space,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-                                        | CGBitmapInfo.byteOrder32Little.rawValue) else {
+        let side = try BadgeCanvas.outputSide(for: crop, requested: options.outputSide)
+        guard let context = BadgeCanvas.makeContext(side: side) else {
             throw BadgeError.contextUnavailable
         }
-
-        let canvas = CGRect(x: 0, y: 0, width: CGFloat(crop.side), height: CGFloat(crop.side))
-        context.clear(canvas)
-        context.interpolationQuality = .none
-        guard let cropped = image.cropping(to: crop.rect) else {
-            throw BadgeError.invalidCrop
-        }
-        // CGBitmapContext 的缓冲首行对应画面顶行，与 libwebp 的行序一致，无需翻转。
-        context.draw(cropped, in: canvas)
-
-        // 挖掉内切圆以外的区域。Core Graphics 的 destinationIn 不会清除路径外的像素，
-        // 这里用奇偶填充的“整幅矩形减去内切圆”圆环配 destinationOut，
-        // 得到真正的半透明抗锯齿边缘。
-        context.setBlendMode(.destinationOut)
-        context.setShouldAntialias(true)
-        context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
-        let ring = CGMutablePath()
-        ring.addRect(canvas)
-        ring.addEllipse(in: canvas)
-        context.addPath(ring)
-        context.fillPath(using: .evenOdd)
-
+        try BadgeCanvas.draw(source.cgImage, crop: crop, in: context)
         // Quartz 的绘图是延迟落盘的，读缓冲前必须 flush。
         context.flush()
 
         guard let pointer = context.data else {
             throw BadgeError.contextUnavailable
         }
-        return try WebP.encodeBGRA(bytes: pointer, width: crop.side, height: crop.side,
-                                   bytesPerRow: context.bytesPerRow,
-                                   quality: options.quality, lossless: options.lossless)
+        let encode: (Int, (Double) -> Void) throws -> Data = { quality, _ in
+            try WebP.encodeBGRA(bytes: pointer, width: side, height: side,
+                                bytesPerRow: context.bytesPerRow,
+                                quality: Double(quality), lossless: options.lossless)
+        }
+        guard let limit = options.maxBytes else {
+            return try encode(Int(options.quality)) { _ in }
+        }
+        if options.lossless {
+            // 无损编码没有画质旋钮，能不能塞进上限一次就见分晓。
+            let data = try encode(100) { _ in }
+            guard data.count <= limit else {
+                throw BadgeError.sizeLimitExceeded(limit: limit, bestSize: data.count)
+            }
+            return data
+        }
+        return try QualitySearch.search(limitBytes: limit, encode: encode).data
     }
 
     /// `原名.webp`，若已存在则依次尝试 `_1`、`_2`……

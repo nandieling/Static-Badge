@@ -2,7 +2,7 @@ import AppKit
 
 /// 手工搭主菜单：一个 Mac 应用至少要有应用菜单、编辑菜单和窗口菜单。
 enum AppMenu {
-    static func make(controller: MainViewController, delegate: AppDelegate) -> NSMenu {
+    static func make(controller: BadgeModeViewController, delegate: AppDelegate) -> NSMenu {
         let mainMenu = NSMenu()
         mainMenu.addItem(appMenuItem(delegate: delegate))
         mainMenu.addItem(fileMenuItem(controller: controller))
@@ -43,17 +43,27 @@ enum AppMenu {
         return item
     }
 
-    private static func fileMenuItem(controller: MainViewController) -> NSMenuItem {
+    private static func fileMenuItem(controller: BadgeModeViewController) -> NSMenuItem {
         let item = NSMenuItem()
         let menu = NSMenu(title: "文件")
         item.submenu = menu
 
-        let load = NSMenuItem(title: "添加图片…", action: #selector(MainViewController.chooseImage(_:)),
+        let load = NSMenuItem(title: "添加图片…",
+                              action: #selector(BadgeModeViewController.chooseImage(_:)),
                               keyEquivalent: "o")
         load.target = controller
         menu.addItem(load)
 
-        let run = NSMenuItem(title: "运行", action: #selector(MainViewController.runExport(_:)),
+        let movie = NSMenuItem(title: "选择视频…",
+                               action: #selector(BadgeModeViewController.chooseVideo(_:)),
+                               keyEquivalent: "e")
+        movie.target = controller
+        menu.addItem(movie)
+
+        menu.addItem(.separator())
+
+        let run = NSMenuItem(title: "运行",
+                             action: #selector(BadgeModeViewController.runExport(_:)),
                              keyEquivalent: "r")
         run.target = controller
         menu.addItem(run)

@@ -5,10 +5,10 @@
 #   ./build_swift.sh --host     只编当前架构，调试时更快
 #
 # 应用图标按这个顺序取：1.icns > 1.webp > 1.png > 自绘图标（tools/make-icon.swift）。
-# 产物：dist_swift/静态勋章制作.app 与 dist_swift/静态勋章制作-mac-universal.zip
+# 产物：dist_swift/勋章制作.app 与 dist_swift/勋章制作-mac-universal.zip
 set -euo pipefail
 
-APP_NAME="静态勋章制作"
+APP_NAME="勋章制作"
 EXECUTABLE="StaticBadge"
 BUNDLE_ID="com.nandieling.static-badge"
 SHORT_VERSION="1.0.0"
@@ -98,6 +98,18 @@ cat >"${APP}/Contents/Info.plist" <<PLIST
 				<string>public.image</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>视频</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.movie</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>${EXECUTABLE}</string>
@@ -122,7 +134,7 @@ cat >"${APP}/Contents/Info.plist" <<PLIST
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>静态勋章制作 ${SHORT_VERSION}</string>
+	<string>${APP_NAME} ${SHORT_VERSION}</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSSupportsSuddenTermination</key>
