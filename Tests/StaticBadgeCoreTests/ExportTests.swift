@@ -37,6 +37,16 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(TestSupport.pixel(export, x: 10, y: 10).a, 255)
     }
 
+    func test裁剪框有偏移时挖的仍是内切圆() throws {
+        let export = try XCTUnwrap(TestSupport.pixels(try CircularBadgeExporter.webPData(
+            from: halfSplit, crop: IntegralCrop(x: 6, y: 3, side: 12))))
+        for corner in [(0, 0), (11, 0), (0, 11), (11, 11)] {
+            XCTAssertEqual(TestSupport.pixel(export, x: corner.0, y: corner.1).a, 0,
+                           "角 \(corner) 应当完全透明")
+        }
+        XCTAssertEqual(TestSupport.pixel(export, x: 6, y: 6).a, 255)
+    }
+
     func test圆形边缘是抗锯齿过渡() throws {
         let export = try XCTUnwrap(TestSupport.pixels(try CircularBadgeExporter.webPData(
             from: halfSplit, crop: IntegralCrop(x: 0, y: 0, side: 21))))

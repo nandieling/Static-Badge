@@ -44,7 +44,7 @@ final class VideoBadgeViewController: BadgePageViewController {
     override func loadView() {
         let root = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 760))
 
-        configureSaveDir(placeholder: "保存目录（默认与原视频相同）")
+        configureSavePath(placeholder: "导出文件的完整路径（.webp），可以改")
         configureRunButton(#selector(runExport(_:)))
 
         for rate in frameRates {
@@ -57,7 +57,7 @@ final class VideoBadgeViewController: BadgePageViewController {
 
         for field in [startField, durationField] {
             field.usesSingleLineMode = true
-            field.alignment = .right
+            field.alignment = .center
             field.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
             field.target = self
             field.action = #selector(optionsChanged(_:))
@@ -96,12 +96,12 @@ final class VideoBadgeViewController: BadgePageViewController {
 
         let grid = FormLayout.grid(rows: [
             ("源文件", FormLayout.row([sourceButton, pathLabel])),
-            ("保存目录", FormLayout.row([saveDirButton, saveDirField])),
+            ("保存位置", FormLayout.row([saveDirButton, savePathField, FormLayout.spacer()])),
             ("输出尺寸", output),
             ("动图", FormLayout.row([fpsPopup, FormLayout.note("起始"), startField,
                                     FormLayout.note("秒"), FormLayout.note("时长"), durationField,
                                     FormLayout.note("秒")])),
-            ("", FormLayout.row([statusLabel, FormLayout.spacer(), runButton])),
+            ("", FormLayout.row([runButton, statusLabel, FormLayout.spacer()])),
         ])
 
         let stage = FormLayout.panel(canvas)
@@ -111,6 +111,7 @@ final class VideoBadgeViewController: BadgePageViewController {
             control.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(control)
         }
+        constrainSavePath(widthOf: root)
         NSLayoutConstraint.activate([
             grid.topAnchor.constraint(equalTo: root.topAnchor, constant: FormLayout.margin),
             grid.leadingAnchor.constraint(equalTo: root.leadingAnchor,
@@ -232,8 +233,8 @@ final class VideoBadgeViewController: BadgePageViewController {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowedContentTypes = [.movie, .video, .mpeg4Movie, .quickTimeMovie]
-        if let directory = saveDirField.stringValue.trimmedNilIfEmpty {
-            panel.directoryURL = URL(fileURLWithPath: directory, isDirectory: true)
+        if let directory = saveDirectory ?? source?.url.deletingLastPathComponent() {
+            panel.directoryURL = directory
         }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         load(url: url)
@@ -249,7 +250,7 @@ final class VideoBadgeViewController: BadgePageViewController {
             canvas.show(SourceImage(cgImage: loaded.firstFrame))
             pathLabel.stringValue = url.path
             pathLabel.toolTip = url.path
-            saveDirField.stringValue = url.deletingLastPathComponent().path
+            suggestSavePath(for: url)
             slider.minValue = 0
             slider.maxValue = max(loaded.duration, 0.001)
             slider.doubleValue = 0
@@ -302,8 +303,7 @@ final class VideoBadgeViewController: BadgePageViewController {
             return
         }
         guard let range = validatedRange() else { return }
-        guard let directory = resolveSaveDirectory(fallback: source.url.deletingLastPathComponent())
-        else { return }
+        guard let target = resolveOutputURL(fallbackSource: source.url) else { return }
         guard let outputOptions = output.read() else { return }
 
         let options = AnimatedExportOptions(fps: selectedFrameRate, quality: 90, loopCount: 0,
@@ -318,7 +318,6 @@ final class VideoBadgeViewController: BadgePageViewController {
             return
         }
 
-        let baseName = source.url.deletingPathExtension().lastPathComponent
         beginExport()
         exportQueue.async { [weak self] in
             let outcome: Result<AnimatedBadgeExporter.Result, Error>
@@ -332,7 +331,7 @@ final class VideoBadgeViewController: BadgePageViewController {
                 outcome = .failure(error)
             }
             DispatchQueue.main.async {
-                self?.finishExport(outcome, directory: directory, baseName: baseName)
+                self?.finishExport(outcome, target: target)
             }
         }
     }
@@ -364,16 +363,16 @@ final class VideoBadgeViewController: BadgePageViewController {
     }
 
     private func finishExport(_ outcome: Result<AnimatedBadgeExporter.Result, Error>,
-                              directory: URL, baseName: String) {
+                              target: URL) {
         endExport()
         switch outcome {
         case .success(let result):
-            guard let target = write(result.data, to: directory, baseName: baseName) else { return }
+            guard let written = write(result.data, to: target) else { return }
             statusLabel.stringValue = "已导出 \(UI.byteText(result.data.count)) · "
-                + "\(target.lastPathComponent)"
+                + "\(written.lastPathComponent)"
             UI.present(style: .informational, title: "完成",
                        message: "已生成 \(result.frameCount) 帧、\(result.side) × \(result.side) 的"
-                           + "动态勋章（无限循环）：\n\(target.path)\n"
+                           + "动态勋章（无限循环）：\n\(written.path)\n"
                            + "文件 \(UI.byteText(result.data.count)) · 画质 \(result.quality)"
                            + (result.attempts > 1 ? " · 试了 \(result.attempts) 次" : ""))
         case .failure(BadgeError.cancelled):

@@ -38,7 +38,7 @@ final class OutputOptionsControl: NSStackView {
         limitField.placeholderString = "如 5"
         limitField.stringValue = Self.defaultMegabytes
         limitField.usesSingleLineMode = true
-        limitField.alignment = .right
+        limitField.alignment = .center
         limitField.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
         limitField.target = self
         limitField.action = #selector(changed(_:))

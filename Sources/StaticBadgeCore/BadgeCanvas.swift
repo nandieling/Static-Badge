@@ -35,7 +35,7 @@ enum BadgeCanvas {
         }
 
         let canvas = CGRect(x: 0, y: 0, width: crop.side, height: crop.side)
-        context.clear(canvas)
+        context.clear(canvasRect(in: context))
         context.interpolationQuality = .none
         guard let cropped = image.cropping(to: crop.rect) else {
             throw BadgeError.invalidCrop
@@ -44,8 +44,13 @@ enum BadgeCanvas {
         context.saveGState()
         applyScale(scale(of: context, crop: crop), in: context)
         context.draw(cropped, in: canvas)
-        applyCircleMask(canvas: canvas, in: context)
         context.restoreGState()
+        applyCircleMask(in: context)
+    }
+
+    /// 画布自身的像素矩形，挖圆和清屏都以它为准。
+    private static func canvasRect(in context: CGContext) -> CGRect {
+        CGRect(x: 0, y: 0, width: context.width, height: context.height)
     }
 
     /// 画布对裁剪框的放大倍数；等于 1 时保持像素不动，避免白白重采样。
@@ -76,7 +81,7 @@ enum BadgeCanvas {
         }
 
         let canvas = CGRect(x: 0, y: 0, width: crop.side, height: crop.side)
-        context.clear(canvas)
+        context.clear(canvasRect(in: context))
         context.interpolationQuality = .none
 
         // 未加平移时，画面会落在 placed 这块区域里（内容正立，视觉左上角在 minX/maxY）。
@@ -93,8 +98,10 @@ enum BadgeCanvas {
         context.concatenate(CGAffineTransform(a: 1, b: 0, c: 0, d: -1,
                                              tx: 0, ty: naturalSize.height))
         context.draw(image, in: CGRect(origin: .zero, size: naturalSize))
-        applyCircleMask(canvas: canvas, in: context)
         context.restoreGState()
+        // 挖圆必须在画布自身坐标里做：上面那串缩放/平移/翻转只属于画面那一层，
+        // 带着它们挖圆，裁剪框一有偏移，圆就跟着跑偏。
+        applyCircleMask(in: context)
     }
 
     /// 算出“画进绘制空间后、未做裁剪平移前”画面所占的矩形。
@@ -127,7 +134,11 @@ enum BadgeCanvas {
     /// 挖掉内切圆以外的区域。Core Graphics 的 destinationIn 不会清除路径外的像素，
     /// 这里用奇偶填充的“整幅矩形减去内切圆”圆环配 destinationOut，
     /// 得到真正的半透明抗锯齿边缘。
-    private static func applyCircleMask(canvas: CGRect, in context: CGContext) {
+    ///
+    /// 调用时 CTM 必须回到画布坐标（即已经 `restoreGState()`），否则挖出来的
+    /// 是个被平移过的位置，甚至是个椭圆。
+    private static func applyCircleMask(in context: CGContext) {
+        let canvas = canvasRect(in: context)
         context.setBlendMode(.destinationOut)
         context.setShouldAntialias(true)
         context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))

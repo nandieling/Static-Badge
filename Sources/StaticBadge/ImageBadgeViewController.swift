@@ -18,7 +18,7 @@ final class ImageBadgeViewController: BadgePageViewController {
     override func loadView() {
         let root = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 720))
 
-        configureSaveDir(placeholder: "保存目录（默认与原图片相同）")
+        configureSavePath(placeholder: "导出文件的完整路径（.webp），可以改")
         configureRunButton(#selector(runExport(_:)))
         output.onChange = { [weak self] in self?.refreshSummaries() }
         canvas.onCropChange = { [weak self] in self?.refreshSummaries() }
@@ -27,9 +27,9 @@ final class ImageBadgeViewController: BadgePageViewController {
 
         let grid = FormLayout.grid(rows: [
             ("源文件", FormLayout.row([sourceButton, pathLabel])),
-            ("保存目录", FormLayout.row([saveDirButton, saveDirField])),
+            ("保存位置", FormLayout.row([saveDirButton, savePathField, FormLayout.spacer()])),
             ("输出尺寸", output),
-            ("", FormLayout.row([statusLabel, FormLayout.spacer(), runButton])),
+            ("", FormLayout.row([runButton, statusLabel, FormLayout.spacer()])),
         ])
 
         let stage = FormLayout.panel(canvas)
@@ -39,6 +39,7 @@ final class ImageBadgeViewController: BadgePageViewController {
             control.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(control)
         }
+        constrainSavePath(widthOf: root)
         NSLayoutConstraint.activate([
             grid.topAnchor.constraint(equalTo: root.topAnchor, constant: FormLayout.margin),
             grid.leadingAnchor.constraint(equalTo: root.leadingAnchor,
@@ -83,7 +84,7 @@ final class ImageBadgeViewController: BadgePageViewController {
         canvas.show(image)
         pathLabel.stringValue = url.path
         pathLabel.toolTip = url.path
-        saveDirField.stringValue = url.deletingLastPathComponent().path
+        suggestSavePath(for: url)
         runButton.isEnabled = true
         refreshSummaries()
     }
@@ -98,8 +99,8 @@ final class ImageBadgeViewController: BadgePageViewController {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowedContentTypes = [.image]
-        if let directory = saveDirField.stringValue.trimmedNilIfEmpty {
-            panel.directoryURL = URL(fileURLWithPath: directory, isDirectory: true)
+        if let directory = saveDirectory ?? imageURL?.deletingLastPathComponent() {
+            panel.directoryURL = directory
         }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         load(url: url)
@@ -122,8 +123,7 @@ final class ImageBadgeViewController: BadgePageViewController {
             return
         }
         guard let outputOptions = output.read() else { return }
-        guard let directory = resolveSaveDirectory(fallback: imageURL.deletingLastPathComponent())
-        else { return }
+        guard let target = resolveOutputURL(fallbackSource: imageURL) else { return }
 
         let side = outputOptions.outputSide ?? crop.side
         var message = "已生成并显示（\(side) × \(side)）"
@@ -144,14 +144,12 @@ final class ImageBadgeViewController: BadgePageViewController {
             return
         }
 
-        guard let target = write(data, to: directory,
-                                 baseName: imageURL.deletingPathExtension().lastPathComponent)
-        else { return }
+        guard let written = write(data, to: target) else { return }
 
         // 与 Qt 版一致：导出成功后把结果图载回画布，方便再裁一轮。
-        load(url: target)
-        statusLabel.stringValue = "已导出 \(UI.byteText(data.count)) · \(target.lastPathComponent)"
+        load(url: written)
+        statusLabel.stringValue = "已导出 \(UI.byteText(data.count)) · \(written.lastPathComponent)"
         UI.present(style: .informational, title: "完成",
-                   message: "\(message)，文件 \(UI.byteText(data.count))：\n\(target.path)")
+                   message: "\(message)，文件 \(UI.byteText(data.count))：\n\(written.path)")
     }
 }

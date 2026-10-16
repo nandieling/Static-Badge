@@ -131,6 +131,39 @@ final class AnimatedExportTests: XCTestCase {
         }
     }
 
+    /// 挖掉的必须是这块正方形的内切圆以外的区域。
+    ///
+    /// 裁剪框带偏移时最容易露馅：挖圆要是跟着画面的平移/翻转跑偏，
+    /// 四角就还剩画面、透明面积占比也会明显偏离 1 - π/4。
+    private func assert挖的是内切圆(_ frame: VideoFixture.RGBA, side: Int, _ note: String) {
+        XCTAssertEqual(frame.width, side)
+        XCTAssertEqual(frame.height, side)
+        let inset = 2
+        for corner in [(inset, inset), (side - 1 - inset, inset),
+                       (inset, side - 1 - inset), (side - 1 - inset, side - 1 - inset)] {
+            XCTAssertLessThan(frame.pixel(corner.0, corner.1).a, 60,
+                              "角 \(corner) 在圆外，应该是全透明 \(note)")
+        }
+        XCTAssertGreaterThan(frame.pixel(side / 2, side / 2).a, 200, "圆心应该留下画面 \(note)")
+        var cleared = 0
+        for y in 0..<side {
+            for x in 0..<side where frame.pixel(x, y).a < 128 { cleared += 1 }
+        }
+        let ratio = Double(cleared) / Double(side * side)
+        XCTAssertEqual(ratio, 1 - .pi / 4, accuracy: 0.03, "透明面积占比应该是 1 - π/4：\(note)")
+    }
+
+    func test裁剪框有偏移时挖的仍是内切圆() throws {
+        let animation = try export(try movie(), crop: IntegralCrop(x: 16, y: 8, side: 112))
+        assert挖的是内切圆(rgba(animation.frames.first!), side: 112, "（裁剪框偏移 16,8）")
+    }
+
+    func test带旋转的裁剪框挖的也是内切圆() throws {
+        let rotated = try movie(transform: CGAffineTransform(rotationAngle: -.pi / 2))
+        let animation = try export(rotated, crop: IntegralCrop(x: 8, y: 16, side: 96))
+        assert挖的是内切圆(rgba(animation.frames.first!), side: 96, "（带旋转、偏移 8,16）")
+    }
+
     func test导出的是逐帧变化的画面() throws {
         let animation = try export(try movie(), crop: IntegralCrop(x: 0, y: 0, side: 128))
         let first = rgba(animation.frames.first!)
